@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 class PID:
     error: float
 
-    def __init__(self, kp, ki, kd, ke=0, out_min=float('-inf'), out_max=float('+inf'),
+    def __init__(self, kp, ki, kd, ke=0, kaw=0, out_min=float('-inf'), out_max=float('+inf'),
                  sampling_period=0, cold_tolerance=0.3, hot_tolerance=0.3):
         """A proportional-integral-derivative controller.
             :param kp: Proportional coefficient.
@@ -22,6 +22,8 @@ class PID:
             :type kd: float
             :param ke: Outdoor temperature compensation coefficient.
             :type ke: float
+            :param kaw: Anti-windup coefficient.
+            :type kaw: float
             :param out_min: Lower output limit.
             :type out_min: float
             :param out_max: Upper output limit.
@@ -46,6 +48,7 @@ class PID:
         self._Ki = ki
         self._Kd = kd
         self._Ke = ke
+        self._Kaw = kaw
         self._out_min = out_min
         self._out_max = out_max
         self._proportional = 0.0
@@ -129,7 +132,7 @@ class PID:
     def dt(self):
         return self._dt
 
-    def set_pid_param(self, kp=None, ki=None, kd=None, ke=None):
+    def set_pid_param(self, kp=None, ki=None, kd=None, ke=None, kaw=None):
         """Set PID parameters."""
         if kp is not None and isinstance(kp, (int, float)):
             self._Kp = kp
@@ -139,6 +142,8 @@ class PID:
             self._Kd = kd
         if ke is not None and isinstance(ke, (int, float)):
             self._Ke = ke
+        if kaw is not None and isinstance(kaw, (int, float)):
+            self._Kaw = kaw
 
     def clear_samples(self):
         """Clear the samples values and timestamp to restart PID from clean state after
@@ -214,7 +219,7 @@ class PID:
 
         # In order to prevent windup, only integrate if the process is not saturated and set point
         # is stable
-        if self._out_min < self._last_output < self._out_max and \
+        if (self._out_min < self._last_output < self._out_max or self._Kaw != 0) and \
                 self._last_set_point == self._set_point:
             self._integral += self._Ki * self._error * self._dt
             # Take external temperature compensation into account for integral clamping
@@ -228,9 +233,16 @@ class PID:
         else:
             self._derivative = 0.0
 
-        # Compute PID Output
-        output = self._proportional + self._integral + self._derivative + self._external
-        self._output = max(min(output, self._out_max), self._out_min)
+        unclamped_output = self._proportional + self._integral + self._derivative + self._external
+        clamped_output = max(min(unclamped_output, self._out_max), self._out_min)
+        
+        # Apply anti-windup adjustment
+        if self._Kaw != 0 and unclamped_output != clamped_output:
+            windup = unclamped_output - clamped_output
+            self._integral -= self._Kaw * windup * self._dt
+            self._integral = max(min(self._integral, self._out_max), self._out_min)
+        
+        self._output = clamped_output
         return self._output, True
 
 

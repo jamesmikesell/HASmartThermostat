@@ -128,6 +128,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(const.CONF_KI, default=const.DEFAULT_KI): vol.Coerce(float),
         vol.Optional(const.CONF_KD, default=const.DEFAULT_KD): vol.Coerce(float),
         vol.Optional(const.CONF_KE, default=const.DEFAULT_KE): vol.Coerce(float),
+        vol.Optional(const.CONF_KAW, default=const.DEFAULT_KAW): vol.Coerce(float),
         vol.Optional(const.CONF_PWM, default=const.DEFAULT_PWM): vol.All(
             cv.time_period, cv.positive_timedelta
         ),
@@ -192,6 +193,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         'ki': config.get(const.CONF_KI),
         'kd': config.get(const.CONF_KD),
         'ke': config.get(const.CONF_KE),
+        'kaw': config.get(const.CONF_KAW),
         'pwm': config.get(const.CONF_PWM),
         'boost_pid_off': config.get(const.CONF_BOOST_PID_OFF),
         'autotune': config.get(const.CONF_AUTOTUNE),
@@ -210,6 +212,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             vol.Optional("ki"): vol.Coerce(float),
             vol.Optional("kd"): vol.Coerce(float),
             vol.Optional("ke"): vol.Coerce(float),
+            vol.Optional("kaw"): vol.Coerce(float),
         },
         "async_set_pid",
     )
@@ -335,6 +338,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
         self._ki = kwargs.get('ki')
         self._kd = kwargs.get('kd')
         self._ke = kwargs.get('ke')
+        self._kaw = kwargs.get('kaw')
         self._pwm = kwargs.get('pwm').seconds
         self._p = self._i = self._d = self._e = self._dt = 0
         self._control_output = self._output_min
@@ -369,10 +373,10 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                             "after doesn't have any effect until autotuning is finished",
                             self.unique_id)
         else:
-            _LOGGER.debug("%s: PID Gains kp = %s, ki = %s, kd = %s", self.unique_id, self._kp,
-                          self._ki, self._kd)
+            _LOGGER.debug("%s: PID Gains kp = %s, ki = %s, kd = %s, ke = %s, kaw = %s",
+                          self.unique_id, self._kp, self._ki, self._kd, self._ke, self._kaw)
             self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd, self._ke,
-                                                      self._min_out, self._max_out,
+                                                      self._kaw, self._min_out, self._max_out,
                                                       self._sampling_period, self._cold_tolerance,
                                                       self._hot_tolerance)
             self._pid_controller.mode = "AUTO"
@@ -674,6 +678,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             "ki": self._ki,
             "kd": self._kd,
             "ke": self._ke,
+            "kaw": self._kaw,
             "pid_mode": self.pid_mode,
             "pid_i": 0 if self._autotune != "none" else self.pid_control_i,
         }
@@ -789,7 +794,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
         for pid_kx, gain in kwargs.items():
             if gain is not None:
                 setattr(self, f'_{pid_kx}', float(gain))
-        self._pid_controller.set_pid_param(self._kp, self._ki, self._kd, self._ke)
+        self._pid_controller.set_pid_param(self._kp, self._ki, self._kd, self._ke, self._kaw)
         await self._async_control_heating(calc_pid=True)
 
     async def async_set_pid_mode(self, **kwargs):
