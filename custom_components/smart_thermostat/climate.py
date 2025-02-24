@@ -475,6 +475,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             elif old_state.attributes.get('Kd') is not None and self._pid_controller is not None:
                 self._kd = float(old_state.attributes.get('Kd'))
                 self._pid_controller.set_pid_param(kd=self._kd)
+            if old_state.attributes.get('kaw') is not None and self._pid_controller is not None:
+                self._kaw = float(old_state.attributes.get('kaw'))
+                self._pid_controller.set_pid_param(kaw=self._kaw)
+            elif old_state.attributes.get('Kaw') is not None and self._pid_controller is not None:
+                self._kaw = float(old_state.attributes.get('kaw'))
+                self._pid_controller.set_pid_param(kaw=self._kaw)
             if old_state.attributes.get('ke') is not None and self._pid_controller is not None:
                 self._ke = float(old_state.attributes.get('ke'))
                 self._pid_controller.set_pid_param(ke=self._ke)
@@ -1086,11 +1092,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                     self._kp = params.Kp
                     self._ki = params.Ki
                     self._kd = params.Kd
+                    self._kaw = params.Kaw
                     _LOGGER.warning("%s: Now running on PID Controller using "
                                     "rule %s: Kp=%s, Ki=%s, Kd=%s", self.entity_id,
                                     self._autotune, self._kp, self._ki, self._kd)
                     self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd,
-                                                              self._ke, self._min_out,
+                                                              self._ke, self._kaw, self._min_out,
                                                               self._max_out, self._sampling_period,
                                                               self._cold_tolerance,
                                                               self._hot_tolerance)
